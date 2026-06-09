@@ -1,10 +1,12 @@
 package service
 
 import (
+	"FTBank/middleware"
 	"FTBank/models"
 	"FTBank/repository"
 	"FTBank/utils"
 	"fmt"
+	"strconv"
 )
 
 type BankService struct {
@@ -17,8 +19,8 @@ func NewBankService(repo repository.BankRepository) *BankService {
 
 func (s BankService) RegisterUser(request models.User) error {
 	// check if the user already exists
-	err := s.BankRepo.CheckUserExists(request.Email)
-	if err != nil {
+	_, err := s.BankRepo.CheckUserExists(request.Email)
+	if err == nil {
 		return fmt.Errorf("user already exist", err)
 	}
 
@@ -50,4 +52,85 @@ func (s BankService) RegisterUser(request models.User) error {
 
 	return nil
 
+}
+
+func (s BankService) Login(loginRequest models.LoginRequest) (string, error) {
+	// check if the user exists
+	user, err := s.BankRepo.CheckUserExists(loginRequest.Email)
+	if err != nil {
+		return "", err
+	}
+
+	// compare passwords to make sure they match
+	err = utils.ComparePasswords(loginRequest.Password, user.Password)
+	if err != nil {
+		return "", err
+	}
+
+	//convert userID fromn uint -> int -> string
+	userID := strconv.Itoa(int(user.ID))
+
+	// generate the token
+	token, err := middleware.GenerateJWT(userID)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+func (s *BankService) AddMoney(request models.AddMoney, userID uint) error {
+	// search for user
+	user, err := s.BankRepo.GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+
+	// validate the amount
+	if request.Amount <= 0 {
+		return fmt.Errorf("invalid amount")
+	}
+
+	// add amount to the user balance
+	user.AvailableBalance += request.Amount
+
+	// update user
+	err = s.BankRepo.UpdateUser(user)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *BankService) TransferMoney(transferRequest models.AddMoney, userID uint) error {
+	// validate amount
+	if transferRequest.Amount <= 0 {
+		return fmt.Errorf("invalid amount")
+	}
+
+	// check if the recipient exists using their acct number
+	recipient, err := s.BankRepo.GetUserByAccountNumber(transferRequest.AccountNumber)
+	if err != nil {
+		return err
+	}
+
+	// search for the sender
+	sender, err := s.BankRepo.GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+
+	// make sure sender have enough in their available balance
+	if sender.AvailableBalance < transferRequest.Amount {
+		return fmt.Errorf("insufficient funds")
+	}
+
+	// make transfer
+	err = s.BankRepo.MakeTransfer(sender, recipient, transferRequest)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -21,3 +21,14 @@ type Transaction struct {
 	Amount                 float64 `json:"amount"`
 	Narration              string  `json:"narration"`
 }
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type AddMoney struct {
+	AccountNumber int     `json:"account_number"`
+	Amount        float64 `json:"amount"`
+	Narration     string  `json:"narration"`
+}
